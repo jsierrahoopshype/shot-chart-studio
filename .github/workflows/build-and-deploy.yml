@@ -1,0 +1,126 @@
+name: Build and deploy
+
+# Sundays at 04:30 UTC: 30 min after the nba-data-archive weekly refresh
+# at 04:00 UTC, giving the upstream HuggingFace dataset time to update.
+on:
+  schedule:
+    - cron: "30 4 * * 0"
+  workflow_dispatch:
+    inputs:
+      skip_catalog:
+        description: "Skip catalog rebuild (faster if catalog hasn't changed)"
+        type: boolean
+        default: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: write   # needed to force-push gh-pages
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build player catalog
+        if: ${{ inputs.skip_catalog != true }}
+        run: python scripts/build_player_catalog.py
+
+      - name: Verify catalog exists
+        run: |
+          if [ ! -f data/players.json ]; then
+            echo "ERROR: data/players.json missing. Cannot build shards." >&2
+            exit 1
+          fi
+          ls -la data/players.json
+
+      - name: Build shot shards
+        run: python scripts/build_shot_shards.py
+
+      - name: Verify dist looks sane
+        run: |
+          if [ ! -f dist/players.json ]; then
+            echo "ERROR: dist/players.json missing" >&2; exit 1
+          fi
+          if [ ! -f dist/format.json ]; then
+            echo "ERROR: dist/format.json missing" >&2; exit 1
+          fi
+          shard_count=$(find dist/players -name "*.json" | wc -l)
+          echo "Shard count: $shard_count"
+          if [ "$shard_count" -lt 2000 ]; then
+            echo "ERROR: too few shards ($shard_count); something went wrong" >&2
+            exit 1
+          fi
+          dist_size=$(du -sh dist | cut -f1)
+          echo "dist/ size: $dist_size"
+
+      - name: Update commit catalog if it changed
+        run: |
+          if git diff --quiet data/players.json; then
+            echo "Catalog unchanged."
+          else
+            echo "Catalog changed; committing on main."
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add data/players.json
+            git commit -m "Auto: refresh player catalog"
+            git push origin main
+          fi
+
+      - name: Add SPA fallback and gh-pages housekeeping
+        run: |
+          # CNAME placeholder: leave a note so future custom-domain work
+          # has a clear spot to fill in.
+          cat > dist/.nojekyll <<'EOF'
+EOF
+          # Tiny index so the bare gh-pages URL doesn't 404 when poked.
+          cat > dist/index.html <<'EOF'
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Shot Chart Studio - data root</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 4rem auto; padding: 0 1rem; color: #222; }
+    code { background: #f3f3f3; padding: 0.1em 0.3em; border-radius: 3px; }
+    a { color: #08c; }
+  </style>
+</head>
+<body>
+  <h1>Shot Chart Studio - data root</h1>
+  <p>This branch (<code>gh-pages</code>) hosts the data files consumed by
+     the Shot Chart Studio UI. It is not a user-facing app.</p>
+  <ul>
+    <li><a href="players.json">players.json</a> - player catalog</li>
+    <li><a href="format.json">format.json</a> - shard schema</li>
+    <li><code>players/&lt;prefix&gt;/&lt;player_id&gt;.json</code> - per-player shot data (example: <a href="players/25/2544.json">players/25/2544.json</a>)</li>
+  </ul>
+  <p>Source repo: <a href="https://github.com/jsierrahoopshype/shot-chart-studio">jsierrahoopshype/shot-chart-studio</a></p>
+</body>
+</html>
+EOF
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          publish_branch: gh-pages
+          force_orphan: true   # one-commit gh-pages history, no bloat
+          user_name: "github-actions[bot]"
+          user_email: "41898282+github-actions[bot]@users.noreply.github.com"
+          commit_message: "Deploy shards (${{ github.sha }})"
