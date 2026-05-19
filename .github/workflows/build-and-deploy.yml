@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 30
 
     permissions:
-      contents: write   # needed to force-push gh-pages
+      contents: write   # needed to force-push gh-pages and (optionally) commit catalog
 
     steps:
       - name: Check out repo
@@ -68,7 +68,7 @@ jobs:
           dist_size=$(du -sh dist | cut -f1)
           echo "dist/ size: $dist_size"
 
-      - name: Update commit catalog if it changed
+      - name: Commit catalog on main if changed
         run: |
           if git diff --quiet data/players.json; then
             echo "Catalog unchanged."
@@ -81,38 +81,42 @@ jobs:
             git push origin main
           fi
 
-      - name: Add SPA fallback and gh-pages housekeeping
+      - name: Add gh-pages housekeeping files
+        # Use Python to write the static files. Avoids the YAML-vs-heredoc
+        # tangle of trying to write multi-line content from a `run:` block.
         run: |
-          # CNAME placeholder: leave a note so future custom-domain work
-          # has a clear spot to fill in.
-          cat > dist/.nojekyll <<'EOF'
-EOF
-          # Tiny index so the bare gh-pages URL doesn't 404 when poked.
-          cat > dist/index.html <<'EOF'
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>Shot Chart Studio - data root</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 4rem auto; padding: 0 1rem; color: #222; }
-    code { background: #f3f3f3; padding: 0.1em 0.3em; border-radius: 3px; }
-    a { color: #08c; }
-  </style>
-</head>
-<body>
-  <h1>Shot Chart Studio - data root</h1>
-  <p>This branch (<code>gh-pages</code>) hosts the data files consumed by
-     the Shot Chart Studio UI. It is not a user-facing app.</p>
-  <ul>
-    <li><a href="players.json">players.json</a> - player catalog</li>
-    <li><a href="format.json">format.json</a> - shard schema</li>
-    <li><code>players/&lt;prefix&gt;/&lt;player_id&gt;.json</code> - per-player shot data (example: <a href="players/25/2544.json">players/25/2544.json</a>)</li>
-  </ul>
-  <p>Source repo: <a href="https://github.com/jsierrahoopshype/shot-chart-studio">jsierrahoopshype/shot-chart-studio</a></p>
-</body>
-</html>
-EOF
+          python <<'PYEOF'
+          from pathlib import Path
+          # An empty .nojekyll tells GitHub Pages "do not run Jekyll on this
+          # site"; without it, files starting with _ get hidden.
+          Path("dist/.nojekyll").touch()
+          # Tiny landing page so the bare gh-pages URL doesn't 404 when poked.
+          Path("dist/index.html").write_text("""<!doctype html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <title>Shot Chart Studio - data root</title>
+            <style>
+              body { font-family: system-ui, sans-serif; max-width: 720px; margin: 4rem auto; padding: 0 1rem; color: #222; }
+              code { background: #f3f3f3; padding: 0.1em 0.3em; border-radius: 3px; }
+              a { color: #08c; }
+            </style>
+          </head>
+          <body>
+            <h1>Shot Chart Studio - data root</h1>
+            <p>This branch (<code>gh-pages</code>) hosts the data files consumed by
+               the Shot Chart Studio UI. It is not a user-facing app.</p>
+            <ul>
+              <li><a href="players.json">players.json</a> - player catalog</li>
+              <li><a href="format.json">format.json</a> - shard schema</li>
+              <li><code>players/&lt;prefix&gt;/&lt;player_id&gt;.json</code> - per-player shot data (example: <a href="players/25/2544.json">players/25/2544.json</a>)</li>
+            </ul>
+            <p>Source repo: <a href="https://github.com/jsierrahoopshype/shot-chart-studio">jsierrahoopshype/shot-chart-studio</a></p>
+          </body>
+          </html>
+          """, encoding="utf-8")
+          print("Wrote dist/.nojekyll and dist/index.html")
+          PYEOF
 
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4
