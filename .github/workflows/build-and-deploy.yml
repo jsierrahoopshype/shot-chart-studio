@@ -71,11 +71,11 @@ jobs:
             git push origin main
           fi
 
-      # Upload everything under dist/shot-chart-shards/ to the
-      # cdechoch/nba-data-archive HF dataset, under a top-level
-      # shot-chart-shards/ directory. upload_large_folder handles retries
-      # and the xet backend uploads in parallel, so 2,840 small files
-      # finish in a few minutes total.
+      # Upload to cdechoch/nba-data-archive under shot-chart-shards/ path.
+      # Using upload_folder (not upload_large_folder) because it supports
+      # path_in_repo. upload_folder uses commit batching internally and
+      # handles a few thousand files fine. delete_patterns wipes stale files
+      # before upload so removed players don't linger.
       - name: Push shards to HuggingFace
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -88,15 +88,13 @@ jobs:
           folder = Path("dist/shot-chart-shards")
           assert folder.exists(), f"missing {folder}"
 
-          # Upload the entire local subtree into a path-with-prefix on HF.
-          # path_in_repo causes HF to mirror our local layout there:
-          #   shot-chart-shards/players.json
-          #   shot-chart-shards/players/25/2544.json
-          api.upload_large_folder(
+          api.upload_folder(
               repo_id="cdechoch/nba-data-archive",
               repo_type="dataset",
               folder_path=str(folder),
               path_in_repo="shot-chart-shards",
+              commit_message="Refresh shot-chart-shards",
+              delete_patterns=["shot-chart-shards/*", "shot-chart-shards/**/*"],
           )
           print("Done.")
           print("Catalog URL:")
