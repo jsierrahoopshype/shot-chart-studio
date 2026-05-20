@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shot Chart Studio</title>
+  <meta name="description" content="Build and share NBA shot charts from 1996/97 to present. Part of HoopsMatic.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="site-header">
+    <h1 class="site-title">Shot Chart Studio</h1>
+    <a class="site-link" href="https://hoopsmatic.com" target="_blank" rel="noopener">HoopsMatic &rarr;</a>
+  </header>
+
+  <main>
+    <!-- Player picker -->
+    <section class="panel panel-picker">
+      <label class="panel-label" for="player-search">Pick a player</label>
+      <div class="combo" role="combobox" aria-haspopup="listbox" aria-expanded="false">
+        <input
+          id="player-search"
+          class="combo-input"
+          type="search"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="Search by name..."
+          aria-autocomplete="list"
+          aria-controls="player-results"
+        >
+        <button id="player-clear" class="combo-clear" type="button" aria-label="Clear">&times;</button>
+      </div>
+      <ul id="player-results" class="combo-results" role="listbox" hidden></ul>
+      <div id="loading-state" class="loading-state" hidden>Loading shots&hellip;</div>
+    </section>
+
+    <!-- Filters -->
+    <section class="panel panel-filters" hidden id="filter-panel">
+      <h2 class="panel-heading">Filters</h2>
+
+      <div class="filter-row">
+        <label class="filter-label">Seasons</label>
+        <div class="season-range">
+          <span id="season-min-label" class="season-label">2003</span>
+          <input id="season-min" class="season-slider" type="range" min="1996" max="2025" value="1996" step="1">
+          <input id="season-max" class="season-slider" type="range" min="1996" max="2025" value="2025" step="1">
+          <span id="season-max-label" class="season-label">2025</span>
+        </div>
+      </div>
+
+      <div class="filter-row">
+        <label class="filter-label">Game type</label>
+        <div class="checkbox-group">
+          <label class="cbx"><input type="checkbox" data-filter="rg" checked> Regular season</label>
+          <label class="cbx"><input type="checkbox" data-filter="po" checked> Playoffs</label>
+        </div>
+      </div>
+
+      <div class="filter-row">
+        <label class="filter-label">Period</label>
+        <div class="checkbox-group" id="period-group">
+          <label class="cbx"><input type="checkbox" data-period="1" checked> Q1</label>
+          <label class="cbx"><input type="checkbox" data-period="2" checked> Q2</label>
+          <label class="cbx"><input type="checkbox" data-period="3" checked> Q3</label>
+          <label class="cbx"><input type="checkbox" data-period="4" checked> Q4</label>
+          <label class="cbx"><input type="checkbox" data-period="ot" checked> OT</label>
+        </div>
+      </div>
+
+      <div class="filter-row">
+        <label class="filter-label">Result</label>
+        <div class="checkbox-group">
+          <label class="cbx"><input type="checkbox" data-result="made" checked> Made</label>
+          <label class="cbx"><input type="checkbox" data-result="missed" checked> Missed</label>
+        </div>
+      </div>
+
+      <div class="filter-row">
+        <label class="filter-label">View</label>
+        <div class="segment">
+          <button class="seg-btn active" data-view="dots" type="button">Dots</button>
+          <button class="seg-btn" data-view="hex" type="button">Hex bins</button>
+        </div>
+      </div>
+
+      <div class="filter-row">
+        <button id="copy-link" class="copy-link" type="button">Copy shareable link</button>
+        <span id="copy-status" class="copy-status" aria-live="polite"></span>
+      </div>
+    </section>
+
+    <!-- Stats + chart -->
+    <section class="chart-area" hidden id="chart-area">
+      <aside class="panel panel-stats">
+        <div class="stats-header">
+          <div class="stats-name" id="stats-name"></div>
+          <div class="stats-meta" id="stats-meta"></div>
+        </div>
+        <dl class="stats-grid">
+          <div class="stat"><dt>Shots</dt><dd id="stat-shots">0</dd></div>
+          <div class="stat"><dt>Made</dt><dd id="stat-made">0</dd></div>
+          <div class="stat"><dt>FG%</dt><dd id="stat-fgp">0.0%</dd></div>
+          <div class="stat"><dt>eFG%</dt><dd id="stat-efg">0.0%</dd></div>
+          <div class="stat"><dt>3PT</dt><dd id="stat-3pt">0/0</dd></div>
+          <div class="stat"><dt>3P%</dt><dd id="stat-3pp">0.0%</dd></div>
+        </dl>
+      </aside>
+
+      <div class="court-wrap">
+        <svg id="court" viewBox="0 0 500 470" preserveAspectRatio="xMidYMid meet" aria-label="Half-court shot chart">
+          <!-- court is drawn by JS so we can control style/colors -->
+        </svg>
+      </div>
+    </section>
+
+    <p class="empty-state" id="empty-state">Pick a player above to load their shot chart.</p>
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      Data: <a href="https://huggingface.co/datasets/cdechoch/nba-data-archive" target="_blank" rel="noopener">cdechoch/nba-data-archive</a> (Apache 2.0).
+      Built for <a href="https://hoopsmatic.com" target="_blank" rel="noopener">HoopsMatic</a>.
+    </p>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
