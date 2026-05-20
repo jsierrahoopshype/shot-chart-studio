@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NBA Time Machine</title>
+  <meta name="description" content="Watch NBA player shot charts evolve season by season. Part of HoopsMatic.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="site-header">
+    <h1 class="site-title">NBA Time Machine</h1>
+    <nav class="site-nav">
+      <a href="../">Shot Chart Studio</a>
+      <a class="site-link" href="https://hoopsmatic.com" target="_blank" rel="noopener">HoopsMatic &rarr;</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="panel panel-picker">
+      <label class="panel-label" for="player-search">Pick a player</label>
+      <div class="combo" role="combobox" aria-haspopup="listbox" aria-expanded="false">
+        <input
+          id="player-search"
+          class="combo-input"
+          type="search"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="Search by name..."
+          aria-autocomplete="list"
+          aria-controls="player-results"
+        >
+        <button id="player-clear" class="combo-clear" type="button" aria-label="Clear">&times;</button>
+      </div>
+      <ul id="player-results" class="combo-results" role="listbox" hidden></ul>
+      <div id="loading-state" class="loading-state" hidden>Loading shots&hellip;</div>
+    </section>
+
+    <section class="chart-area" hidden id="chart-area">
+      <aside class="panel panel-stats">
+        <div class="stats-header">
+          <div class="stats-name" id="stats-name"></div>
+          <div class="stats-meta" id="stats-meta"></div>
+        </div>
+        <dl class="stats-grid">
+          <div class="stat"><dt>Shots</dt><dd id="stat-shots">0</dd></div>
+          <div class="stat"><dt>Made</dt><dd id="stat-made">0</dd></div>
+          <div class="stat"><dt>FG%</dt><dd id="stat-fgp">0.0%</dd></div>
+          <div class="stat"><dt>eFG%</dt><dd id="stat-efg">0.0%</dd></div>
+          <div class="stat"><dt>3PT</dt><dd id="stat-3pt">0/0</dd></div>
+          <div class="stat"><dt>3P%</dt><dd id="stat-3pp">0.0%</dd></div>
+        </dl>
+
+        <div class="stats-divider"></div>
+
+        <div class="view-controls">
+          <div class="control-row">
+            <label class="control-label">View</label>
+            <div class="segment">
+              <button class="seg-btn active" data-view="dots" type="button">Dots</button>
+              <button class="seg-btn" data-view="hex" type="button">Hex</button>
+            </div>
+          </div>
+          <div class="control-row">
+            <label class="control-label">Mode</label>
+            <div class="segment">
+              <button class="seg-btn active" data-mode="keyframe" type="button">Keyframe</button>
+              <button class="seg-btn" data-mode="trail" type="button">Trail</button>
+            </div>
+          </div>
+          <div class="control-row">
+            <label class="control-label">Scope</label>
+            <div class="checkbox-group compact">
+              <label class="cbx"><input type="checkbox" id="scope-rg" checked> RG</label>
+              <label class="cbx"><input type="checkbox" id="scope-po" checked> PO</label>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <div class="court-wrap">
+        <div class="season-overlay">
+          <div class="season-overlay-label" id="season-overlay-label">2024-25</div>
+        </div>
+        <svg id="court" viewBox="0 0 500 470" preserveAspectRatio="xMidYMid meet" aria-label="Half-court shot chart">
+        </svg>
+      </div>
+    </section>
+
+    <!-- Timeline / playback controls -->
+    <section class="panel panel-timeline" hidden id="timeline-panel">
+      <div class="timeline-controls">
+        <button id="play-toggle" class="play-btn" type="button" aria-label="Play">
+          <svg viewBox="0 0 20 20" width="20" height="20"><polygon points="4,3 17,10 4,17" fill="currentColor"/></svg>
+        </button>
+        <button id="prev-season" class="step-btn" type="button" aria-label="Previous season">
+          <svg viewBox="0 0 20 20" width="16" height="16"><polygon points="13,3 6,10 13,17" fill="currentColor"/><rect x="3" y="3" width="2" height="14" fill="currentColor"/></svg>
+        </button>
+        <button id="next-season" class="step-btn" type="button" aria-label="Next season">
+          <svg viewBox="0 0 20 20" width="16" height="16"><polygon points="7,3 14,10 7,17" fill="currentColor"/><rect x="15" y="3" width="2" height="14" fill="currentColor"/></svg>
+        </button>
+        <div class="timeline-scrubber">
+          <input id="scrubber" type="range" min="0" max="0" step="1" value="0" aria-label="Season">
+          <div id="scrubber-marks" class="scrubber-marks"></div>
+        </div>
+        <select id="speed-select" class="speed-select" aria-label="Animation speed">
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1x</option>
+          <option value="1.5">1.5x</option>
+          <option value="2">2x</option>
+          <option value="4">4x</option>
+        </select>
+        <button id="copy-link" class="copy-link" type="button">Copy link</button>
+        <span id="copy-status" class="copy-status" aria-live="polite"></span>
+      </div>
+    </section>
+
+    <p class="empty-state" id="empty-state">Pick a player above to load their career.</p>
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      Data: <a href="https://huggingface.co/datasets/cdechoch/nba-data-archive" target="_blank" rel="noopener">cdechoch/nba-data-archive</a> (Apache 2.0).
+      Part of <a href="https://hoopsmatic.com" target="_blank" rel="noopener">HoopsMatic</a>.
+    </p>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

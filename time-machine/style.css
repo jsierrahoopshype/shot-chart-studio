@@ -1,0 +1,155 @@
+/* Time Machine extra styles, layered over the main style.css */
+
+.site-nav {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: 14px;
+}
+.site-nav a {
+  color: var(--muted);
+}
+.site-nav a:hover {
+  color: var(--accent);
+}
+
+/* Court area gets a corner overlay for the current-season label */
+.court-wrap {
+  position: relative;
+}
+.season-overlay {
+  position: absolute;
+  top: 18px;
+  left: 22px;
+  pointer-events: none;
+  z-index: 5;
+}
+.season-overlay-label {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.85);
+}
+
+/* Stats panel gets extra view controls below the standard grid */
+.stats-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+.view-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.control-row {
+  display: grid;
+  grid-template-columns: 50px 1fr;
+  gap: 8px;
+  align-items: center;
+}
+.control-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.checkbox-group.compact {
+  gap: 4px 12px;
+}
+.checkbox-group.compact .cbx {
+  font-size: 13px;
+}
+
+/* Timeline panel sits at the bottom */
+.panel-timeline {
+  padding: 12px 16px;
+}
+.timeline-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.play-btn,
+.step-btn {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.play-btn {
+  width: 36px;
+  height: 36px;
+  color: var(--accent);
+}
+.play-btn:hover,
+.step-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.play-btn.playing svg polygon { display: none; }
+.play-btn.playing::after {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 14px;
+  background: currentColor;
+  box-shadow: 8px 0 0 currentColor;
+}
+.step-btn {
+  width: 32px;
+  height: 32px;
+}
+
+.timeline-scrubber {
+  flex: 1;
+  min-width: 200px;
+  position: relative;
+}
+#scrubber {
+  width: 100%;
+  margin: 0;
+}
+.scrubber-marks {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 6px;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.scrubber-marks .mark {
+  flex: 1;
+  text-align: center;
+  cursor: pointer;
+}
+.scrubber-marks .mark:hover {
+  color: var(--accent);
+}
+
+.speed-select {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  padding: 5px 6px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .season-overlay-label { font-size: 22px; }
+  .timeline-controls { gap: 6px; }
+  .timeline-scrubber { min-width: 100%; order: 10; }
+  .copy-link { order: 11; }
+  #copy-status { order: 12; }
+}
