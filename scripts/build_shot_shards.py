@@ -1,24 +1,21 @@
-"""Build per-player shot shards for Shot Chart Studio (v2, column-oriented).
+"""Build per-player shot shards for Shot Chart Studio.
 
-Same data, more compact wire format:
+Reads merged/shotdetail.parquet from cdechoch/nba-data-archive on
+HuggingFace, groups all shots by PLAYER_ID, and writes one minified JSON
+file per player to dist/shot-chart-shards/players/<prefix>/<player_id>.json.
 
-  * Column-oriented within each shard. Instead of `[{...shot1...}, {...shot2...}]`
-    we store `{"x":[...], "y":[...], ...}` so JSON keys appear once per file
-    instead of once per shot.
-
-  * String interning. For zone, action, game_id, and team fields we keep
-    a per-shard lookup table at the top and use small integer indexes in
-    the column arrays.
-
-Result: ~960 MB -> ~340 MB total, LeBron from 6 MB to ~2 MB.
+Column-oriented format + string interning per shard so each file is
+roughly 1/3 the size of a naive object-of-objects layout.
 
 Output layout:
   dist/
-    players.json
-    players/
-      00/2.json, 3.json, ...
-      25/2544.json   (LeBron)
-      ...
+    shot-chart-shards/
+      players.json          (catalog copy, for same-origin fetch)
+      format.json
+      players/
+        00/2.json, 3.json, ...
+        25/2544.json   (LeBron James)
+        ...
 
 Run: python scripts/build_shot_shards.py
 """
@@ -61,8 +58,12 @@ NEEDED_COLUMNS = [
 
 ROOT = Path(__file__).resolve().parent.parent
 DIST_DIR = ROOT / "dist"
+# All shard output goes under this subdir so it can be uploaded as a single
+# tree to HuggingFace without colliding with the parquet files in the same
+# dataset.
+SHARDS_ROOT = DIST_DIR / "shot-chart-shards"
 PLAYERS_CATALOG = ROOT / "data" / "players.json"
-SHARDS_DIR = DIST_DIR / "players"
+SHARDS_DIR = SHARDS_ROOT / "players"
 
 
 def shard_prefix(player_id: int) -> str:
@@ -92,8 +93,6 @@ def safe_str(v) -> str:
 
 
 class Interner:
-    """Maps string -> int index, preserves insertion order, exposes vocab list."""
-
     __slots__ = ("_idx", "_vocab")
 
     def __init__(self) -> None:
@@ -114,8 +113,6 @@ class Interner:
 
 
 def build_shard_payload(pid: int, raw_shots: list[dict], catalog: dict) -> dict:
-    """Convert a list of per-shot dicts into the column-oriented payload."""
-    # Deterministic order: by date, then game, then period, then time-into-period.
     raw_shots.sort(key=lambda s: (s["dt"], s["g_str"], s["p"], -s["t"]))
 
     games = Interner()
@@ -124,7 +121,6 @@ def build_shard_payload(pid: int, raw_shots: list[dict], catalog: dict) -> dict:
     actions = Interner()
 
     n = len(raw_shots)
-
     col_g = [0] * n
     col_dt = [""] * n
     col_h = [0] * n
@@ -159,34 +155,21 @@ def build_shard_payload(pid: int, raw_shots: list[dict], catalog: dict) -> dict:
         col_po[i] = s["po"]
 
     cat_entry = catalog.get(str(pid), {})
-
     return {
         "player_id": pid,
         "name": cat_entry.get("name", ""),
         "first_season": cat_entry.get("first_season"),
         "last_season": cat_entry.get("last_season"),
         "shot_count": n,
-        # Lookup tables. Kept short, referenced by integer index in `shots`.
         "game_codes": games.vocab,
         "team_codes": teams.vocab,
         "zone_codes": zones.vocab,
         "action_codes": actions.vocab,
         "shots": {
-            "g": col_g,
-            "dt": col_dt,
-            "h": col_h,
-            "v": col_v,
-            "p": col_p,
-            "t": col_t,
-            "a": col_a,
-            "z": col_z,
-            "d": col_d,
-            "x": col_x,
-            "y": col_y,
-            "m": col_m,
-            "3": col_three,
-            "s": col_s,
-            "po": col_po,
+            "g": col_g, "dt": col_dt, "h": col_h, "v": col_v,
+            "p": col_p, "t": col_t, "a": col_a, "z": col_z,
+            "d": col_d, "x": col_x, "y": col_y,
+            "m": col_m, "3": col_three, "s": col_s, "po": col_po,
         },
     }
 
@@ -199,22 +182,24 @@ def main() -> int:
         )
         return 1
 
+    # Always wipe dist/ for a clean rebuild.
     if DIST_DIR.exists():
         print(f"Removing existing {DIST_DIR}...")
         shutil.rmtree(DIST_DIR)
-    DIST_DIR.mkdir(parents=True, exist_ok=True)
+    SHARDS_ROOT.mkdir(parents=True, exist_ok=True)
     SHARDS_DIR.mkdir(parents=True, exist_ok=True)
 
     with PLAYERS_CATALOG.open(encoding="utf-8") as f:
         catalog = json.load(f)
 
-    (DIST_DIR / "players.json").write_text(
+    # Catalog copy that lives next to the shards on HF.
+    (SHARDS_ROOT / "players.json").write_text(
         json.dumps(catalog, separators=(",", ":"), ensure_ascii=False),
         encoding="utf-8",
     )
 
-    # Also write a format manifest so consumers know how to decode the shards.
-    (DIST_DIR / "format.json").write_text(
+    # Schema manifest.
+    (SHARDS_ROOT / "format.json").write_text(
         json.dumps(
             {
                 "version": 2,
@@ -263,10 +248,6 @@ def main() -> int:
     print(f"Row groups:   {pf.num_row_groups}")
     print()
 
-    # First pass: collect raw shots per player. We keep raw strings here
-    # rather than interning during ingest, because each player gets its
-    # own interner (a string interned globally would still need a per-
-    # player remap on write).
     by_player: dict[int, list[dict]] = defaultdict(list)
 
     for rg_idx in tqdm(range(pf.num_row_groups), desc="row groups", unit="rg"):
@@ -313,7 +294,6 @@ def main() -> int:
 
     for pid, shots in tqdm(by_player.items(), desc="shards", unit="player"):
         payload = build_shard_payload(pid, shots, catalog)
-
         sub = SHARDS_DIR / shard_prefix(pid)
         sub.mkdir(parents=True, exist_ok=True)
         out_path = sub / f"{pid}.json"
@@ -336,7 +316,7 @@ def main() -> int:
     print(f"Largest:         {largest[0]} ({largest[1]:,} bytes)")
     print(f"Smallest:        {smallest[0]} ({smallest[1]:,} bytes)")
     print()
-    print(f"Output dir: {DIST_DIR}")
+    print(f"Output dir: {SHARDS_ROOT}")
     return 0
 
 

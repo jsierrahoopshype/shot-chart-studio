@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 60
 
     permissions:
-      contents: write    # release create/upload, optional catalog commit
+      contents: write    # may auto-commit catalog updates
 
     steps:
       - name: Check out repo
@@ -49,15 +49,15 @@ jobs:
 
       - name: Verify dist looks sane
         run: |
-          test -f dist/players.json
-          test -f dist/format.json
-          shard_count=$(find dist/players -name "*.json" | wc -l)
+          test -f dist/shot-chart-shards/players.json
+          test -f dist/shot-chart-shards/format.json
+          shard_count=$(find dist/shot-chart-shards/players -name "*.json" | wc -l)
           echo "Shard count: $shard_count"
           if [ "$shard_count" -lt 2000 ]; then
             echo "ERROR: too few shards ($shard_count); something went wrong" >&2
             exit 1
           fi
-          du -sh dist
+          du -sh dist/shot-chart-shards
 
       - name: Commit catalog on main if changed
         run: |
@@ -71,75 +71,36 @@ jobs:
             git push origin main
           fi
 
-      # Bundle every shard into a structured tarball. Single large asset
-      # uploads much faster than 2,840 small ones and the unpacked layout
-      # is preserved when consumers extract it. The tarball goes alongside
-      # the per-file assets so people can choose.
-      - name: Build tarball of all shards
-        run: |
-          cd dist
-          tar czf shot-chart-data.tar.gz players.json format.json players
-          ls -la shot-chart-data.tar.gz
-          cd ..
-
-      # Create or refresh the "data" release. Using --clobber via gh release
-      # upload lets us replace asset files in place each week without
-      # creating new tags. This keeps URLs stable across rebuilds:
-      #   .../releases/download/data/players.json
-      #   .../releases/download/data/players/25/2544.json
-      - name: Ensure 'data' release exists
+      # Upload everything under dist/shot-chart-shards/ to the
+      # cdechoch/nba-data-archive HF dataset, under a top-level
+      # shot-chart-shards/ directory. upload_large_folder handles retries
+      # and the xet backend uploads in parallel, so 2,840 small files
+      # finish in a few minutes total.
+      - name: Push shards to HuggingFace
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          if ! gh release view data --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            gh release create data \
-              --repo "${{ github.repository }}" \
-              --title "Shot Chart Studio Data" \
-              --notes "Per-player shot shards, catalog, and schema. Refreshed weekly. See README for download patterns."
-          fi
+          python <<'PYEOF'
+          from pathlib import Path
+          from huggingface_hub import HfApi
 
-      - name: Upload root files to release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload data \
-            dist/players.json \
-            dist/format.json \
-            dist/shot-chart-data.tar.gz \
-            --repo "${{ github.repository }}" \
-            --clobber
+          api = HfApi()
+          folder = Path("dist/shot-chart-shards")
+          assert folder.exists(), f"missing {folder}"
 
-      # Per-player files: too many to enumerate in one gh upload call (cmdline
-      # arg limit hits hard at ~2840 paths). We batch them.
-      - name: Upload per-player shards to release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # We use the path-prefixed name pattern players__<prefix>__<id>.json
-          # in the release because GitHub Release assets share a flat
-          # namespace (no slashes allowed in asset names). The app rewrites
-          # the path accordingly when it builds URLs.
-          mkdir -p flat
-          find dist/players -name "*.json" -type f | while read -r f; do
-            rel="${f#dist/players/}"            # e.g. "25/2544.json"
-            flat_name="players__${rel//\//__}"  # e.g. "players__25__2544.json"
-            cp "$f" "flat/$flat_name"
-          done
-          total=$(ls flat | wc -l)
-          echo "Prepared $total flat asset files"
-
-          # Batch uploads. gh release upload accepts many files per call
-          # but cmdline length caps how many.
-          ls flat/*.json | xargs -n 200 gh release upload data \
-            --repo "${{ github.repository }}" --clobber
-
-      - name: Summary
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "Release page:"
-          echo "  https://github.com/${{ github.repository }}/releases/tag/data"
-          echo "Asset URL pattern (per-player):"
-          echo "  https://github.com/${{ github.repository }}/releases/download/data/players__<prefix>__<id>.json"
-          echo "Catalog URL:"
-          echo "  https://github.com/${{ github.repository }}/releases/download/data/players.json"
+          # Upload the entire local subtree into a path-with-prefix on HF.
+          # path_in_repo causes HF to mirror our local layout there:
+          #   shot-chart-shards/players.json
+          #   shot-chart-shards/players/25/2544.json
+          api.upload_large_folder(
+              repo_id="cdechoch/nba-data-archive",
+              repo_type="dataset",
+              folder_path=str(folder),
+              path_in_repo="shot-chart-shards",
+          )
+          print("Done.")
+          print("Catalog URL:")
+          print("  https://huggingface.co/datasets/cdechoch/nba-data-archive/resolve/main/shot-chart-shards/players.json")
+          print("Per-player URL pattern:")
+          print("  https://huggingface.co/datasets/cdechoch/nba-data-archive/resolve/main/shot-chart-shards/players/<prefix>/<id>.json")
+          PYEOF

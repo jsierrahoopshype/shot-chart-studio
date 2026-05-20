@@ -5,21 +5,17 @@
 
 // ---------- Constants ----------
 //
-// Data lives on a GitHub Release named "data" on this repo.
-// Release assets share a flat namespace (no slashes), so per-player files
-// are uploaded as players__<prefix>__<id>.json. The catalog and schema use
-// their natural names.
-const REPO_OWNER = "jsierrahoopshype";
-const REPO_NAME = "shot-chart-studio";
-const RELEASE_TAG = "data";
-const RELEASE_BASE =
-  `https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/download/${RELEASE_TAG}`;
+// Data lives on the HuggingFace dataset cdechoch/nba-data-archive, under
+// shot-chart-shards/. HF serves /resolve/main/<path> with permissive CORS
+// for simple GET requests, which is what we need.
+const HF_DATASET_BASE =
+  "https://huggingface.co/datasets/cdechoch/nba-data-archive/resolve/main/shot-chart-shards";
 
-const CATALOG_URL = `${RELEASE_BASE}/players.json`;
+const CATALOG_URL = `${HF_DATASET_BASE}/players.json`;
 
 function shardUrl(pid) {
   const prefix = Math.floor(Number(pid) / 100);
-  return `${RELEASE_BASE}/players__${prefix}__${pid}.json`;
+  return `${HF_DATASET_BASE}/players/${prefix}/${pid}.json`;
 }
 
 const COURT = {
