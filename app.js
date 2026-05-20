@@ -4,10 +4,6 @@
 // shot shard, renders dots or hex bins on a half-court SVG with filters.
 
 // ---------- Constants ----------
-//
-// Data lives on the HuggingFace dataset cdechoch/nba-data-archive, under
-// shot-chart-shards/. HF serves /resolve/main/<path> with permissive CORS
-// for simple GET requests, which is what we need.
 const HF_DATASET_BASE =
   "https://huggingface.co/datasets/cdechoch/nba-data-archive/resolve/main/shot-chart-shards";
 
@@ -32,6 +28,22 @@ const COURT = {
   cornerThreeX: 220,
   restrictedR: 40,
 };
+
+// Approximate league-average FG% by SHOT_ZONE_BASIC.
+// Values are rough 1996-2025 averages; the exact numbers shift a few
+// percentage points by era but the relative ordering is stable, which
+// is what matters for visual color encoding. Used to center each hex
+// bin's color around the right baseline rather than a single global 0.45.
+const ZONE_LEAGUE_AVG = {
+  "Restricted Area": 0.62,
+  "In The Paint (Non-RA)": 0.42,
+  "Mid-Range": 0.40,
+  "Above the Break 3": 0.355,
+  "Left Corner 3": 0.385,
+  "Right Corner 3": 0.385,
+  "Backcourt": 0.03,
+};
+const DEFAULT_ZONE_AVG = 0.42;
 
 const STATE = {
   catalog: null,
@@ -329,10 +341,9 @@ function renderDots(filtered) {
   svg.appendChild(layer);
 }
 
-function hexColor(fgp) {
-  if (fgp == null) return "#cccccc";
-  const delta = Math.max(-0.2, Math.min(0.2, fgp - 0.45));
-  const t = (delta + 0.2) / 0.4;
+// Lerp a single channel between red, gray, and green based on t in [0, 1].
+// t < 0.5 = red side (worse than expected), t > 0.5 = green side (better).
+function rampColor(t) {
   if (t < 0.5) {
     const k = t / 0.5;
     const r = Math.round(201 + (240 - 201) * k);
@@ -346,6 +357,20 @@ function hexColor(fgp) {
     const b = Math.round(240 + (85 - 240) * k);
     return `rgb(${r},${g},${b})`;
   }
+}
+
+// Zone-aware coloring: a hex's color depends on FG% RELATIVE TO that hex's
+// dominant zone average, not relative to a global midpoint. So a 55% layup
+// looks worse than expected (red) while a 38% Above-the-Break 3 looks
+// league-average (gray). DELTA_RANGE controls how much over/under-average
+// the chart visualizes; +/- 10 pp seems to read well to the eye.
+const DELTA_RANGE = 0.10;
+function hexColor(fgp, zoneAvg) {
+  if (fgp == null) return "#cccccc";
+  const baseline = (zoneAvg == null) ? DEFAULT_ZONE_AVG : zoneAvg;
+  const delta = Math.max(-DELTA_RANGE, Math.min(DELTA_RANGE, fgp - baseline));
+  const t = (delta + DELTA_RANGE) / (2 * DELTA_RANGE);
+  return rampColor(t);
 }
 
 function renderHex(filtered) {
@@ -369,12 +394,17 @@ function renderHex(filtered) {
     const key = `${row}:${col}`;
     let b = bins.get(key);
     if (!b) {
-      b = { row, col, made: 0, total: 0, cx: 0, cy: 0 };
+      b = { row, col, made: 0, total: 0, cx: 0, cy: 0, zones: {} };
       bins.set(key, b);
     }
     b.total++;
     if (s.made) b.made++;
     b.cx += sx; b.cy += sy;
+    // Track zone distribution for this bin so we can color against the
+    // right league baseline. Plurality wins.
+    if (s.zone) {
+      b.zones[s.zone] = (b.zones[s.zone] || 0) + 1;
+    }
   }
   let maxCount = 0;
   for (const b of bins.values()) if (b.total > maxCount) maxCount = b.total;
@@ -383,6 +413,14 @@ function renderHex(filtered) {
     const cx = b.cx / b.total;
     const cy = b.cy / b.total;
     const fgp = b.made / b.total;
+
+    // Dominant zone for this hex bin.
+    let bestZone = null, bestCount = 0;
+    for (const [z, c] of Object.entries(b.zones)) {
+      if (c > bestCount) { bestZone = z; bestCount = c; }
+    }
+    const zoneAvg = bestZone ? ZONE_LEAGUE_AVG[bestZone] : DEFAULT_ZONE_AVG;
+
     const size = hexSize * (0.45 + 0.55 * Math.min(1, b.total / Math.max(8, maxCount / 4)));
     const poly = document.createElementNS(NS, "polygon");
     const pts = [];
@@ -392,7 +430,7 @@ function renderHex(filtered) {
     }
     poly.setAttribute("points", pts.join(" "));
     poly.setAttribute("class", "hex");
-    poly.setAttribute("fill", hexColor(fgp));
+    poly.setAttribute("fill", hexColor(fgp, zoneAvg));
     layer.appendChild(poly);
   }
   svg.appendChild(layer);
