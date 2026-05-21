@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>NBA Shot Range Finder</title>
-  <meta name="description" content="Find NBA players by shot zone, distance, and efficiency. Part of HoopsMatic.">
+  <meta name="description" content="Look up NBA players' shot breakdowns or find shooters by range. Part of HoopsMatic.">
   <link rel="stylesheet" href="../style.css">
   <link rel="stylesheet" href="style.css">
 </head>
@@ -19,42 +19,157 @@
   </header>
 
   <main>
-    <section class="panel panel-query">
-      <h2 class="panel-heading">Find shooters</h2>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="lookup" role="tab" aria-selected="true" type="button">Look up a player</button>
+      <button class="tab" data-tab="find" role="tab" aria-selected="false" type="button">Find players</button>
+    </nav>
 
-      <div class="freetext-row">
-        <input
-          id="freetext"
-          class="freetext-input"
-          type="search"
-          autocomplete="off"
-          spellcheck="false"
-          placeholder='Try "best corner 3 shooters since 2015" or "500+ mid range shots"'
-          aria-label="Free-text query"
-        >
-        <button id="freetext-parse" type="button" class="freetext-btn">Parse</button>
+    <section id="loading-state" class="panel" hidden>
+      <p>Loading data&hellip;</p>
+    </section>
+
+    <!-- =========================== TAB 1: LOOKUP =========================== -->
+    <section class="tab-panel" id="tab-lookup" role="tabpanel">
+      <section class="panel panel-picker">
+        <label class="panel-label" for="player-search">Pick a player</label>
+        <div class="combo" role="combobox" aria-haspopup="listbox" aria-expanded="false">
+          <input
+            id="player-search"
+            class="combo-input"
+            type="search"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Search by name..."
+            aria-autocomplete="list"
+            aria-controls="player-results"
+          >
+          <button id="player-clear" class="combo-clear" type="button" aria-label="Clear">&times;</button>
+        </div>
+        <ul id="player-results" class="combo-results" role="listbox" hidden></ul>
+      </section>
+
+      <div class="lookup-grid" id="lookup-grid" hidden>
+        <aside class="lookup-court-panel panel">
+          <h2 class="panel-heading">Click an area or a zone row</h2>
+          <div class="court-pickwrap">
+            <svg id="lookup-court" viewBox="0 0 500 470" preserveAspectRatio="xMidYMid meet" aria-label="Click a court area to filter"></svg>
+          </div>
+          <div class="court-legend" id="lookup-legend">Showing: <strong>all shots</strong></div>
+          <button id="lookup-clear-filter" class="copy-link" type="button" hidden>Clear area filter</button>
+        </aside>
+
+        <section class="lookup-stats">
+          <div class="panel">
+            <div class="stats-header">
+              <div class="stats-name" id="lookup-name"></div>
+              <div class="stats-meta" id="lookup-meta"></div>
+            </div>
+            <dl class="stats-grid">
+              <div class="stat"><dt>Attempts</dt><dd id="lookup-stat-att">0</dd></div>
+              <div class="stat"><dt>Made</dt><dd id="lookup-stat-made">0</dd></div>
+              <div class="stat"><dt>FG%</dt><dd id="lookup-stat-fgp">0.0%</dd></div>
+            </dl>
+          </div>
+
+          <div class="panel">
+            <h3 class="panel-heading">By zone <span class="zone-hint">(click a row to filter)</span></h3>
+            <div class="results-table-wrap">
+              <table class="results-table breakdown-table zone-clickable">
+                <thead>
+                  <tr>
+                    <th class="th-name">Zone</th>
+                    <th class="th-num">Att</th>
+                    <th class="th-num">Att%</th>
+                    <th class="th-num">Made</th>
+                    <th class="th-num">Make%</th>
+                    <th class="th-num">FG%</th>
+                  </tr>
+                </thead>
+                <tbody id="lookup-zone-body"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="season-header">
+              <h3 class="panel-heading">Season evolution <span id="season-legend" class="zone-hint"></span></h3>
+              <nav class="metric-tabs" role="tablist">
+                <button class="metric-tab active" data-metric="fgp" type="button">FG%</button>
+                <button class="metric-tab" data-metric="attShare" type="button">Att%</button>
+                <button class="metric-tab" data-metric="makeShare" type="button">Make%</button>
+              </nav>
+            </div>
+            <div class="season-evolution">
+              <div class="season-chart-wrap">
+                <svg id="season-chart" viewBox="0 0 600 220" preserveAspectRatio="none" aria-label="Season chart"></svg>
+              </div>
+              <div class="results-table-wrap">
+                <table class="results-table breakdown-table">
+                  <thead>
+                    <tr>
+                      <th class="th-name">Season</th>
+                      <th class="th-num">Att</th>
+                      <th class="th-num">Att%</th>
+                      <th class="th-num">Made</th>
+                      <th class="th-num">Make%</th>
+                      <th class="th-num">FG%</th>
+                    </tr>
+                  </thead>
+                  <tbody id="lookup-season-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
 
-      <div class="query-grid">
-        <div class="qr">
-          <label class="qr-label">Zone</label>
-          <select id="q-zone" class="qr-input">
-            <option value="">Any zone</option>
-            <option value="Restricted Area">Restricted Area</option>
-            <option value="In The Paint (Non-RA)">In The Paint (Non-RA)</option>
-            <option value="Mid-Range">Mid-Range</option>
-            <option value="Above the Break 3">Above the Break 3</option>
-            <option value="Left Corner 3">Left Corner 3</option>
-            <option value="Right Corner 3">Right Corner 3</option>
-            <option value="Any 3">Any 3 (all 3PT zones)</option>
-            <option value="Any 2">Any 2 (all 2PT zones)</option>
-            <option value="Backcourt">Backcourt</option>
-          </select>
-        </div>
+      <p class="empty-state" id="lookup-empty">Pick a player above to see their shot breakdown.</p>
+    </section>
 
-        <div class="qr">
-          <label class="qr-label">Distance</label>
-          <div class="dist-controls">
+    <!-- =========================== TAB 2: FIND =========================== -->
+    <section class="tab-panel" id="tab-find" role="tabpanel" hidden>
+      <section class="panel panel-court">
+        <h2 class="panel-heading">Click anywhere on the court</h2>
+        <p class="panel-sub">Click an area to see the best shooters from there.</p>
+        <div class="court-pickwrap">
+          <svg id="find-court" viewBox="0 0 500 470" preserveAspectRatio="xMidYMid meet" aria-label="Pick a court area"></svg>
+        </div>
+        <div class="court-legend" id="find-legend"></div>
+      </section>
+
+      <section class="panel panel-presets">
+        <h2 class="panel-heading">Quick queries</h2>
+        <div class="presets-row">
+          <button class="preset-btn" data-preset="best-3pt" type="button">Best 3PT shooters since 2015</button>
+          <button class="preset-btn" data-preset="best-rim" type="button">Top finishers at the rim</button>
+          <button class="preset-btn" data-preset="best-midrange" type="button">Best mid-range shooters</button>
+          <button class="preset-btn" data-preset="best-corner3" type="button">Best left corner 3 shooters</button>
+          <button class="preset-btn" data-preset="best-deep3" type="button">Best deep 3s (25+ ft)</button>
+          <button class="preset-btn" data-preset="worst-3pt" type="button">Worst 3PT (high volume)</button>
+          <button class="preset-btn" data-preset="most-volume" type="button">Most prolific scorers</button>
+        </div>
+      </section>
+
+      <section class="panel panel-query">
+        <h2 class="panel-heading">Filters</h2>
+        <div class="query-grid">
+          <div class="qr">
+            <label class="qr-label">Zone</label>
+            <select id="q-zone" class="qr-input">
+              <option value="">Any zone</option>
+              <option value="Restricted Area">Restricted Area</option>
+              <option value="In The Paint (Non-RA)">In The Paint (Non-RA)</option>
+              <option value="Mid-Range">Mid-Range</option>
+              <option value="Above the Break 3">Above the Break 3</option>
+              <option value="Left Corner 3">Left Corner 3</option>
+              <option value="Right Corner 3">Right Corner 3</option>
+              <option value="Any 3">Any 3 (all 3PT zones)</option>
+              <option value="Any 2">Any 2 (all 2PT zones)</option>
+              <option value="Backcourt">Backcourt</option>
+            </select>
+          </div>
+          <div class="qr">
+            <label class="qr-label">Distance</label>
             <select id="q-dist" class="qr-input">
               <option value="">Any distance</option>
               <option value="0-3">0-3 ft (at rim)</option>
@@ -66,89 +181,77 @@
               <option value="backcourt">Backcourt</option>
             </select>
           </div>
-        </div>
-
-        <div class="qr">
-          <label class="qr-label">Seasons</label>
-          <div class="season-inputs">
-            <input id="q-season-min" type="number" min="1996" max="2025" value="1996" class="qr-input season-input">
-            <span class="season-dash">-</span>
-            <input id="q-season-max" type="number" min="1996" max="2025" value="2025" class="qr-input season-input">
+          <div class="qr">
+            <label class="qr-label">Seasons</label>
+            <div class="season-inputs">
+              <input id="q-season-min" type="number" min="1996" max="2025" value="1996" class="qr-input season-input">
+              <span class="season-dash">-</span>
+              <input id="q-season-max" type="number" min="1996" max="2025" value="2025" class="qr-input season-input">
+            </div>
+          </div>
+          <div class="qr">
+            <label class="qr-label">Game type</label>
+            <div class="cbx-group">
+              <label class="cbx"><input type="checkbox" id="q-rg" checked> Regular</label>
+              <label class="cbx"><input type="checkbox" id="q-po" checked> Playoffs</label>
+            </div>
+          </div>
+          <div class="qr">
+            <label class="qr-label">Min attempts</label>
+            <input id="q-min-attempts" type="number" min="1" value="200" class="qr-input">
+          </div>
+          <div class="qr">
+            <label class="qr-label">Sort by</label>
+            <select id="q-sort" class="qr-input">
+              <option value="fgp_desc">FG% (highest)</option>
+              <option value="fgp_asc">FG% (lowest)</option>
+              <option value="att_desc">Attempts (most)</option>
+              <option value="made_desc">Makes (most)</option>
+            </select>
+          </div>
+          <div class="qr">
+            <label class="qr-label">Limit</label>
+            <select id="q-limit" class="qr-input">
+              <option value="25">Top 25</option>
+              <option value="50" selected>Top 50</option>
+              <option value="100">Top 100</option>
+              <option value="500">Top 500</option>
+            </select>
+          </div>
+          <div class="qr qr-actions">
+            <button id="q-run" class="run-btn" type="button">Find shooters</button>
+            <span id="q-status" class="run-status" aria-live="polite"></span>
           </div>
         </div>
+      </section>
 
-        <div class="qr">
-          <label class="qr-label">Game type</label>
-          <div class="cbx-group">
-            <label class="cbx"><input type="checkbox" id="q-rg" checked> Regular</label>
-            <label class="cbx"><input type="checkbox" id="q-po" checked> Playoffs</label>
-          </div>
+      <section id="results-panel" class="panel" hidden>
+        <div class="results-header">
+          <h2 class="panel-heading" id="results-title">Results</h2>
+          <button id="copy-link" class="copy-link" type="button">Copy link</button>
+          <span id="copy-status" class="copy-status" aria-live="polite"></span>
         </div>
-
-        <div class="qr">
-          <label class="qr-label">Min attempts</label>
-          <input id="q-min-attempts" type="number" min="1" value="200" class="qr-input">
+        <div class="results-table-wrap">
+          <table class="results-table">
+            <thead>
+              <tr>
+                <th class="th-rank">#</th>
+                <th class="th-headshot"></th>
+                <th class="th-name">Player</th>
+                <th class="th-num">Seasons</th>
+                <th class="th-num">Attempts</th>
+                <th class="th-num">Makes</th>
+                <th class="th-num">FG%</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="results-body"></tbody>
+          </table>
         </div>
+      </section>
 
-        <div class="qr">
-          <label class="qr-label">Sort by</label>
-          <select id="q-sort" class="qr-input">
-            <option value="fgp_desc">FG% (highest)</option>
-            <option value="fgp_asc">FG% (lowest)</option>
-            <option value="att_desc">Attempts (most)</option>
-            <option value="made_desc">Makes (most)</option>
-          </select>
-        </div>
-
-        <div class="qr">
-          <label class="qr-label">Limit</label>
-          <select id="q-limit" class="qr-input">
-            <option value="25">Top 25</option>
-            <option value="50" selected>Top 50</option>
-            <option value="100">Top 100</option>
-            <option value="500">Top 500</option>
-          </select>
-        </div>
-
-        <div class="qr qr-actions">
-          <button id="q-run" class="run-btn" type="button">Find shooters</button>
-          <span id="q-status" class="run-status" aria-live="polite"></span>
-        </div>
-      </div>
-
-      <div class="parse-feedback" id="parse-feedback" hidden></div>
+      <p class="empty-state" id="find-empty">Click an area on the court above, pick a preset, or set up your own filters.</p>
     </section>
-
-    <section id="loading-state" class="panel" hidden>
-      <p>Loading data&hellip;</p>
-    </section>
-
-    <section id="results-panel" class="panel" hidden>
-      <div class="results-header">
-        <h2 class="panel-heading" id="results-title">Results</h2>
-        <button id="copy-link" class="copy-link" type="button">Copy link</button>
-        <span id="copy-status" class="copy-status" aria-live="polite"></span>
-      </div>
-      <div class="results-table-wrap">
-        <table class="results-table">
-          <thead>
-            <tr>
-              <th class="th-rank">#</th>
-              <th class="th-headshot"></th>
-              <th class="th-name">Player</th>
-              <th class="th-num">Seasons</th>
-              <th class="th-num">Attempts</th>
-              <th class="th-num">Makes</th>
-              <th class="th-num">FG%</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="results-body"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <p class="empty-state" id="empty-state">Set up a query above and click "Find shooters".</p>
   </main>
 
   <footer class="site-footer">
