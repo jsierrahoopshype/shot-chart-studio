@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NBA Shot Range Finder</title>
+  <meta name="description" content="Find NBA players by shot zone, distance, and efficiency. Part of HoopsMatic.">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="site-header">
+    <h1 class="site-title">Shot Range Finder</h1>
+    <nav class="site-nav">
+      <a href="../">Shot Chart Studio</a>
+      <a href="../time-machine/">Time Machine</a>
+      <a class="site-link" href="https://hoopsmatic.com" target="_blank" rel="noopener">HoopsMatic &rarr;</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="panel panel-query">
+      <h2 class="panel-heading">Find shooters</h2>
+
+      <div class="freetext-row">
+        <input
+          id="freetext"
+          class="freetext-input"
+          type="search"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder='Try "best corner 3 shooters since 2015" or "500+ mid range shots"'
+          aria-label="Free-text query"
+        >
+        <button id="freetext-parse" type="button" class="freetext-btn">Parse</button>
+      </div>
+
+      <div class="query-grid">
+        <div class="qr">
+          <label class="qr-label">Zone</label>
+          <select id="q-zone" class="qr-input">
+            <option value="">Any zone</option>
+            <option value="Restricted Area">Restricted Area</option>
+            <option value="In The Paint (Non-RA)">In The Paint (Non-RA)</option>
+            <option value="Mid-Range">Mid-Range</option>
+            <option value="Above the Break 3">Above the Break 3</option>
+            <option value="Left Corner 3">Left Corner 3</option>
+            <option value="Right Corner 3">Right Corner 3</option>
+            <option value="Any 3">Any 3 (all 3PT zones)</option>
+            <option value="Any 2">Any 2 (all 2PT zones)</option>
+            <option value="Backcourt">Backcourt</option>
+          </select>
+        </div>
+
+        <div class="qr">
+          <label class="qr-label">Distance</label>
+          <div class="dist-controls">
+            <select id="q-dist" class="qr-input">
+              <option value="">Any distance</option>
+              <option value="0-3">0-3 ft (at rim)</option>
+              <option value="3-10">3-10 ft</option>
+              <option value="10-16">10-16 ft</option>
+              <option value="16-22">16-22 ft (long 2)</option>
+              <option value="22-25">22-25 ft</option>
+              <option value="25+">25+ ft</option>
+              <option value="backcourt">Backcourt</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="qr">
+          <label class="qr-label">Seasons</label>
+          <div class="season-inputs">
+            <input id="q-season-min" type="number" min="1996" max="2025" value="1996" class="qr-input season-input">
+            <span class="season-dash">-</span>
+            <input id="q-season-max" type="number" min="1996" max="2025" value="2025" class="qr-input season-input">
+          </div>
+        </div>
+
+        <div class="qr">
+          <label class="qr-label">Game type</label>
+          <div class="cbx-group">
+            <label class="cbx"><input type="checkbox" id="q-rg" checked> Regular</label>
+            <label class="cbx"><input type="checkbox" id="q-po" checked> Playoffs</label>
+          </div>
+        </div>
+
+        <div class="qr">
+          <label class="qr-label">Min attempts</label>
+          <input id="q-min-attempts" type="number" min="1" value="200" class="qr-input">
+        </div>
+
+        <div class="qr">
+          <label class="qr-label">Sort by</label>
+          <select id="q-sort" class="qr-input">
+            <option value="fgp_desc">FG% (highest)</option>
+            <option value="fgp_asc">FG% (lowest)</option>
+            <option value="att_desc">Attempts (most)</option>
+            <option value="made_desc">Makes (most)</option>
+          </select>
+        </div>
+
+        <div class="qr">
+          <label class="qr-label">Limit</label>
+          <select id="q-limit" class="qr-input">
+            <option value="25">Top 25</option>
+            <option value="50" selected>Top 50</option>
+            <option value="100">Top 100</option>
+            <option value="500">Top 500</option>
+          </select>
+        </div>
+
+        <div class="qr qr-actions">
+          <button id="q-run" class="run-btn" type="button">Find shooters</button>
+          <span id="q-status" class="run-status" aria-live="polite"></span>
+        </div>
+      </div>
+
+      <div class="parse-feedback" id="parse-feedback" hidden></div>
+    </section>
+
+    <section id="loading-state" class="panel" hidden>
+      <p>Loading data&hellip;</p>
+    </section>
+
+    <section id="results-panel" class="panel" hidden>
+      <div class="results-header">
+        <h2 class="panel-heading" id="results-title">Results</h2>
+        <button id="copy-link" class="copy-link" type="button">Copy link</button>
+        <span id="copy-status" class="copy-status" aria-live="polite"></span>
+      </div>
+      <div class="results-table-wrap">
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th class="th-rank">#</th>
+              <th class="th-headshot"></th>
+              <th class="th-name">Player</th>
+              <th class="th-num">Seasons</th>
+              <th class="th-num">Attempts</th>
+              <th class="th-num">Makes</th>
+              <th class="th-num">FG%</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="results-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <p class="empty-state" id="empty-state">Set up a query above and click "Find shooters".</p>
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      Data: <a href="https://huggingface.co/datasets/cdechoch/nba-data-archive" target="_blank" rel="noopener">cdechoch/nba-data-archive</a> (Apache 2.0).
+      Part of <a href="https://hoopsmatic.com" target="_blank" rel="noopener">HoopsMatic</a>.
+    </p>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

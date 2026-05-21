@@ -47,10 +47,15 @@ jobs:
       - name: Build shot shards
         run: python scripts/build_shot_shards.py
 
+      - name: Build shot aggregates
+        run: python scripts/build_shot_aggregates.py
+
       - name: Verify dist looks sane
         run: |
           test -f dist/shot-chart-shards/players.json
           test -f dist/shot-chart-shards/format.json
+          test -f dist/shot-chart-shards/aggregates.csv
+          test -f dist/shot-chart-shards/aggregates.csv.gz
           shard_count=$(find dist/shot-chart-shards/players -name "*.json" | wc -l)
           echo "Shard count: $shard_count"
           if [ "$shard_count" -lt 2000 ]; then
@@ -71,11 +76,6 @@ jobs:
             git push origin main
           fi
 
-      # Upload to cdechoch/nba-data-archive under shot-chart-shards/ path.
-      # Using upload_folder (not upload_large_folder) because it supports
-      # path_in_repo. upload_folder uses commit batching internally and
-      # handles a few thousand files fine. delete_patterns wipes stale files
-      # before upload so removed players don't linger.
       - name: Push shards to HuggingFace
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -101,4 +101,6 @@ jobs:
           print("  https://huggingface.co/datasets/cdechoch/nba-data-archive/resolve/main/shot-chart-shards/players.json")
           print("Per-player URL pattern:")
           print("  https://huggingface.co/datasets/cdechoch/nba-data-archive/resolve/main/shot-chart-shards/players/<prefix>/<id>.json")
+          print("Aggregates URL:")
+          print("  https://huggingface.co/datasets/cdechoch/nba-data-archive/resolve/main/shot-chart-shards/aggregates.csv.gz")
           PYEOF
