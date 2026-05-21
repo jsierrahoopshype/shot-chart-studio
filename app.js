@@ -2,6 +2,7 @@
 //
 // Vanilla JS. Single page. Picks a player, fetches their column-oriented
 // shot shard, renders dots or hex bins on a half-court SVG with filters.
+// Includes a poster export (Canvas2D) for social sharing.
 
 // ---------- Constants ----------
 const HF_DATASET_BASE =
@@ -29,11 +30,6 @@ const COURT = {
   restrictedR: 40,
 };
 
-// Approximate league-average FG% by SHOT_ZONE_BASIC.
-// Values are rough 1996-2025 averages; the exact numbers shift a few
-// percentage points by era but the relative ordering is stable, which
-// is what matters for visual color encoding. Used to center each hex
-// bin's color around the right baseline rather than a single global 0.45.
 const ZONE_LEAGUE_AVG = {
   "Restricted Area": 0.62,
   "In The Paint (Non-RA)": 0.42,
@@ -44,6 +40,7 @@ const ZONE_LEAGUE_AVG = {
   "Backcourt": 0.03,
 };
 const DEFAULT_ZONE_AVG = 0.42;
+const DELTA_RANGE = 0.10;
 
 const STATE = {
   catalog: null,
@@ -157,11 +154,9 @@ async function fetchJson(url, label) {
   if (!r.ok) throw new Error(`${label}: HTTP ${r.status}`);
   return r.json();
 }
-
 async function loadCatalog() {
   return fetchJson(CATALOG_URL, "catalog");
 }
-
 async function loadShard(pid) {
   return fetchJson(shardUrl(pid), `shard for ${pid}`);
 }
@@ -210,23 +205,20 @@ function shotMatchesScope(s, f) {
   }
   return true;
 }
-
 function shotMatchesView(s, f) {
   if (!shotMatchesScope(s, f)) return false;
   if (s.made && !f.made) return false;
   if (!s.made && !f.missed) return false;
   return true;
 }
-
 function shotsForStats() {
   return STATE.flat.filter(s => shotMatchesScope(s, STATE.filters));
 }
-
 function shotsForChart() {
   return STATE.flat.filter(s => shotMatchesView(s, STATE.filters));
 }
 
-// ---------- Court rendering ----------
+// ---------- Court rendering (SVG, on-page) ----------
 function drawCourtLines() {
   const svg = $("#court");
   svg.innerHTML = "";
@@ -236,73 +228,58 @@ function drawCourtLines() {
 
   const outer = document.createElementNS(NS, "rect");
   outer.setAttribute("x", 0); outer.setAttribute("y", 0);
-  outer.setAttribute("width", COURT.width);
-  outer.setAttribute("height", COURT.height);
+  outer.setAttribute("width", COURT.width); outer.setAttribute("height", COURT.height);
   g.appendChild(outer);
 
   const paint = document.createElementNS(NS, "rect");
   paint.setAttribute("x", COURT.rimX - COURT.paintWidth / 2);
   paint.setAttribute("y", 0);
-  paint.setAttribute("width", COURT.paintWidth);
-  paint.setAttribute("height", COURT.paintHeight);
+  paint.setAttribute("width", COURT.paintWidth); paint.setAttribute("height", COURT.paintHeight);
   g.appendChild(paint);
 
   const ftc = document.createElementNS(NS, "circle");
-  ftc.setAttribute("cx", COURT.rimX);
-  ftc.setAttribute("cy", COURT.paintHeight);
+  ftc.setAttribute("cx", COURT.rimX); ftc.setAttribute("cy", COURT.paintHeight);
   ftc.setAttribute("r", COURT.ftCircleR);
   g.appendChild(ftc);
 
   const ra = document.createElementNS(NS, "path");
-  const rx = COURT.rimX, ry = COURT.rimY, rr = COURT.restrictedR;
-  ra.setAttribute("d", `M ${rx - rr} ${ry} A ${rr} ${rr} 0 0 0 ${rx + rr} ${ry}`);
+  ra.setAttribute("d", `M ${COURT.rimX - COURT.restrictedR} ${COURT.rimY} A ${COURT.restrictedR} ${COURT.restrictedR} 0 0 0 ${COURT.rimX + COURT.restrictedR} ${COURT.rimY}`);
   g.appendChild(ra);
 
   const rim = document.createElementNS(NS, "circle");
-  rim.setAttribute("cx", COURT.rimX);
-  rim.setAttribute("cy", COURT.rimY);
+  rim.setAttribute("cx", COURT.rimX); rim.setAttribute("cy", COURT.rimY);
   rim.setAttribute("r", COURT.rimRadius);
   rim.setAttribute("class", "court-rim");
   g.appendChild(rim);
 
   const bb = document.createElementNS(NS, "line");
-  bb.setAttribute("x1", COURT.rimX - 30);
-  bb.setAttribute("y1", 40);
-  bb.setAttribute("x2", COURT.rimX + 30);
-  bb.setAttribute("y2", 40);
+  bb.setAttribute("x1", COURT.rimX - 30); bb.setAttribute("y1", 40);
+  bb.setAttribute("x2", COURT.rimX + 30); bb.setAttribute("y2", 40);
   g.appendChild(bb);
 
-  const leftCornerX = COURT.rimX - COURT.cornerThreeX;
-  const rightCornerX = COURT.rimX + COURT.cornerThreeX;
-  const leftLine = document.createElementNS(NS, "line");
-  leftLine.setAttribute("x1", leftCornerX); leftLine.setAttribute("y1", 0);
-  leftLine.setAttribute("x2", leftCornerX); leftLine.setAttribute("y2", COURT.cornerThreeY);
-  g.appendChild(leftLine);
-  const rightLine = document.createElementNS(NS, "line");
-  rightLine.setAttribute("x1", rightCornerX); rightLine.setAttribute("y1", 0);
-  rightLine.setAttribute("x2", rightCornerX); rightLine.setAttribute("y2", COURT.cornerThreeY);
-  g.appendChild(rightLine);
+  const lcX = COURT.rimX - COURT.cornerThreeX;
+  const rcX = COURT.rimX + COURT.cornerThreeX;
+  const ll = document.createElementNS(NS, "line");
+  ll.setAttribute("x1", lcX); ll.setAttribute("y1", 0);
+  ll.setAttribute("x2", lcX); ll.setAttribute("y2", COURT.cornerThreeY);
+  g.appendChild(ll);
+  const rl = document.createElementNS(NS, "line");
+  rl.setAttribute("x1", rcX); rl.setAttribute("y1", 0);
+  rl.setAttribute("x2", rcX); rl.setAttribute("y2", COURT.cornerThreeY);
+  g.appendChild(rl);
 
   const arc = document.createElementNS(NS, "path");
-  arc.setAttribute(
-    "d",
-    `M ${leftCornerX} ${COURT.cornerThreeY} A ${COURT.threeR} ${COURT.threeR} 0 0 0 ${rightCornerX} ${COURT.cornerThreeY}`
-  );
+  arc.setAttribute("d", `M ${lcX} ${COURT.cornerThreeY} A ${COURT.threeR} ${COURT.threeR} 0 0 0 ${rcX} ${COURT.cornerThreeY}`);
   g.appendChild(arc);
 
   const half = document.createElementNS(NS, "line");
-  half.setAttribute("x1", 0);
-  half.setAttribute("y1", COURT.height);
-  half.setAttribute("x2", COURT.width);
-  half.setAttribute("y2", COURT.height);
+  half.setAttribute("x1", 0); half.setAttribute("y1", COURT.height);
+  half.setAttribute("x2", COURT.width); half.setAttribute("y2", COURT.height);
   half.setAttribute("class", "court-rim");
   g.appendChild(half);
 
   const center = document.createElementNS(NS, "path");
-  center.setAttribute(
-    "d",
-    `M ${COURT.rimX - 60} ${COURT.height} A 60 60 0 0 1 ${COURT.rimX + 60} ${COURT.height}`
-  );
+  center.setAttribute("d", `M ${COURT.rimX - 60} ${COURT.height} A 60 60 0 0 1 ${COURT.rimX + 60} ${COURT.height}`);
   g.appendChild(center);
 
   svg.appendChild(g);
@@ -341,30 +318,15 @@ function renderDots(filtered) {
   svg.appendChild(layer);
 }
 
-// Lerp a single channel between red, gray, and green based on t in [0, 1].
-// t < 0.5 = red side (worse than expected), t > 0.5 = green side (better).
 function rampColor(t) {
   if (t < 0.5) {
     const k = t / 0.5;
-    const r = Math.round(201 + (240 - 201) * k);
-    const g = Math.round(48 + (240 - 48) * k);
-    const b = Math.round(74 + (240 - 74) * k);
-    return `rgb(${r},${g},${b})`;
+    return `rgb(${Math.round(201 + (240 - 201) * k)},${Math.round(48 + (240 - 48) * k)},${Math.round(74 + (240 - 74) * k)})`;
   } else {
     const k = (t - 0.5) / 0.5;
-    const r = Math.round(240 + (31 - 240) * k);
-    const g = Math.round(240 + (157 - 240) * k);
-    const b = Math.round(240 + (85 - 240) * k);
-    return `rgb(${r},${g},${b})`;
+    return `rgb(${Math.round(240 + (31 - 240) * k)},${Math.round(240 + (157 - 240) * k)},${Math.round(240 + (85 - 240) * k)})`;
   }
 }
-
-// Zone-aware coloring: a hex's color depends on FG% RELATIVE TO that hex's
-// dominant zone average, not relative to a global midpoint. So a 55% layup
-// looks worse than expected (red) while a 38% Above-the-Break 3 looks
-// league-average (gray). DELTA_RANGE controls how much over/under-average
-// the chart visualizes; +/- 10 pp seems to read well to the eye.
-const DELTA_RANGE = 0.10;
 function hexColor(fgp, zoneAvg) {
   if (fgp == null) return "#cccccc";
   const baseline = (zoneAvg == null) ? DEFAULT_ZONE_AVG : zoneAvg;
@@ -393,18 +355,11 @@ function renderHex(filtered) {
     const col = Math.floor((sx - colOffset) / hexW);
     const key = `${row}:${col}`;
     let b = bins.get(key);
-    if (!b) {
-      b = { row, col, made: 0, total: 0, cx: 0, cy: 0, zones: {} };
-      bins.set(key, b);
-    }
+    if (!b) { b = { row, col, made: 0, total: 0, cx: 0, cy: 0, zones: {} }; bins.set(key, b); }
     b.total++;
     if (s.made) b.made++;
     b.cx += sx; b.cy += sy;
-    // Track zone distribution for this bin so we can color against the
-    // right league baseline. Plurality wins.
-    if (s.zone) {
-      b.zones[s.zone] = (b.zones[s.zone] || 0) + 1;
-    }
+    if (s.zone) b.zones[s.zone] = (b.zones[s.zone] || 0) + 1;
   }
   let maxCount = 0;
   for (const b of bins.values()) if (b.total > maxCount) maxCount = b.total;
@@ -413,14 +368,11 @@ function renderHex(filtered) {
     const cx = b.cx / b.total;
     const cy = b.cy / b.total;
     const fgp = b.made / b.total;
-
-    // Dominant zone for this hex bin.
     let bestZone = null, bestCount = 0;
     for (const [z, c] of Object.entries(b.zones)) {
       if (c > bestCount) { bestZone = z; bestCount = c; }
     }
     const zoneAvg = bestZone ? ZONE_LEAGUE_AVG[bestZone] : DEFAULT_ZONE_AVG;
-
     const size = hexSize * (0.45 + 0.55 * Math.min(1, b.total / Math.max(8, maxCount / 4)));
     const poly = document.createElementNS(NS, "polygon");
     const pts = [];
@@ -445,10 +397,7 @@ function recomputeStats() {
   let threeMade = 0;
   for (const s of pool) {
     if (s.made) made++;
-    if (s.three) {
-      threeAtt++;
-      if (s.made) threeMade++;
-    }
+    if (s.three) { threeAtt++; if (s.made) threeMade++; }
   }
   const fgp = total ? made / total : 0;
   const efg = total ? (made + 0.5 * threeMade) / total : 0;
@@ -460,36 +409,477 @@ function recomputeStats() {
   $("#stat-efg").textContent = (efg * 100).toFixed(1) + "%";
   $("#stat-3pt").textContent = `${threeMade}/${threeAtt}`;
   $("#stat-3pp").textContent = (threeP * 100).toFixed(1) + "%";
+
+  return { total, made, fgp, efg, threeAtt, threeMade, threeP };
 }
 
 // ---------- Render orchestration ----------
 function renderAll() {
   const forChart = shotsForChart();
   recomputeStats();
-  if (STATE.filters.view === "hex") {
-    renderHex(forChart);
-  } else {
-    renderDots(forChart);
-  }
+  if (STATE.filters.view === "hex") renderHex(forChart);
+  else renderDots(forChart);
   writeUrlParams();
 }
 
 const renderDeferred = debounce(renderAll, 16);
 
-// ---------- Combo / autocomplete ----------
+// ---------- POSTER EXPORT (Canvas2D) ----------
+//
+// Pipeline:
+//   1. Pick canvas dimensions for chosen size
+//   2. Compute the chart placement region inside the canvas (with margins)
+//   3. Fill background
+//   4. Draw player name + meta at top
+//   5. Draw court via Canvas2D (re-implements the SVG draw functions)
+//   6. Draw filtered shots (dots or hex) at canvas-coord positions
+//   7. Draw stats row
+//   8. Draw branding bar
+//   9. Try to load headshot image, draw if successful (otherwise skip)
+//   10. canvas.toBlob() and download
+
+const POSTER_SIZES = {
+  square: { w: 1080, h: 1080 },
+  landscape: { w: 1200, h: 675 },
+  vertical: { w: 1080, h: 1920 },
+};
+
+const POSTER_THEME = {
+  bg: "#ffffff",
+  text: "#1c1c1a",
+  muted: "#6e6e6a",
+  accent: "#08589e",
+  courtLine: "#2a2a28",
+  courtBg: "#faf9f7",
+  made: "#1f9d55",
+  madeSoft: "rgba(31, 157, 85, 0.65)",
+  missed: "#c9304a",
+  missedSoft: "rgba(201, 48, 74, 0.55)",
+};
+
+// Canvas2D port of the SVG court drawing. Takes a transform that maps
+// the COURT (500x470 units) space into canvas coords inside (x, y, w, h).
+function drawCourtCanvas(ctx, x, y, w, h) {
+  const sx = w / COURT.width;
+  const sy = h / COURT.height;
+  const tx = (u) => x + u * sx;
+  const ty = (u) => y + u * sy;
+
+  // Court background
+  ctx.fillStyle = POSTER_THEME.courtBg;
+  ctx.fillRect(x, y, w, h);
+
+  ctx.strokeStyle = POSTER_THEME.courtLine;
+  ctx.lineWidth = Math.max(1, sx * 1.0);
+  ctx.lineCap = "round";
+
+  // Outer rectangle
+  ctx.strokeRect(x, y, w, h);
+
+  // Paint
+  ctx.strokeRect(
+    tx(COURT.rimX - COURT.paintWidth / 2),
+    ty(0),
+    COURT.paintWidth * sx,
+    COURT.paintHeight * sy
+  );
+
+  // Free throw circle
+  ctx.beginPath();
+  ctx.arc(tx(COURT.rimX), ty(COURT.paintHeight), COURT.ftCircleR * sx, 0, 2 * Math.PI);
+  ctx.stroke();
+
+  // Restricted area
+  ctx.beginPath();
+  ctx.arc(tx(COURT.rimX), ty(COURT.rimY), COURT.restrictedR * sx, Math.PI, 2 * Math.PI);
+  ctx.stroke();
+
+  // Rim
+  ctx.lineWidth = Math.max(1.2, sx * 1.4);
+  ctx.beginPath();
+  ctx.arc(tx(COURT.rimX), ty(COURT.rimY), COURT.rimRadius * sx, 0, 2 * Math.PI);
+  ctx.stroke();
+  ctx.lineWidth = Math.max(1, sx * 1.0);
+
+  // Backboard
+  ctx.beginPath();
+  ctx.moveTo(tx(COURT.rimX - 30), ty(40));
+  ctx.lineTo(tx(COURT.rimX + 30), ty(40));
+  ctx.stroke();
+
+  // Three-point line
+  const lcX = COURT.rimX - COURT.cornerThreeX;
+  const rcX = COURT.rimX + COURT.cornerThreeX;
+  ctx.beginPath();
+  ctx.moveTo(tx(lcX), ty(0));
+  ctx.lineTo(tx(lcX), ty(COURT.cornerThreeY));
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(tx(rcX), ty(0));
+  ctx.lineTo(tx(rcX), ty(COURT.cornerThreeY));
+  ctx.stroke();
+  // Arc using ellipse() since sx and sy may differ
+  ctx.beginPath();
+  // Compute arc endpoints in canvas coords and an approximate center.
+  // The court arc has radius 237.5 around the rim (COURT.rimX, COURT.rimY).
+  // Approximation: use ctx.arc with average scale; quality is fine at poster sizes.
+  const arcR = COURT.threeR * ((sx + sy) / 2);
+  const arcCx = tx(COURT.rimX);
+  const arcCy = ty(COURT.rimY);
+  // Compute angle range. We want the upper arc that meets corner lines at
+  // y = COURT.cornerThreeY (which corresponds to canvas ty(140)).
+  // Angle from rim to (lcX, 140): atan2(140 - rimY, lcX - rimX)
+  const a1 = Math.atan2(COURT.cornerThreeY - COURT.rimY, lcX - COURT.rimX);
+  const a2 = Math.atan2(COURT.cornerThreeY - COURT.rimY, rcX - COURT.rimX);
+  ctx.arc(arcCx, arcCy, arcR, a1, a2, false);
+  ctx.stroke();
+
+  // Half-court line
+  ctx.lineWidth = Math.max(1.2, sx * 1.4);
+  ctx.beginPath();
+  ctx.moveTo(x, y + h);
+  ctx.lineTo(x + w, y + h);
+  ctx.stroke();
+  ctx.lineWidth = Math.max(1, sx * 1.0);
+
+  // Center jump circle (half visible)
+  ctx.beginPath();
+  ctx.arc(tx(COURT.rimX), ty(COURT.height), 60 * sx, Math.PI, 2 * Math.PI);
+  ctx.stroke();
+}
+
+// Draw shots onto canvas. Same dot/hex logic as the SVG paths, recast.
+function drawShotsCanvas(ctx, x, y, w, h, shots, view) {
+  const sx = w / COURT.width;
+  const sy = h / COURT.height;
+  const tx = (u) => x + u * sx;
+  const ty = (u) => y + u * sy;
+  const mapToCanvas = (s) => ({
+    cx: tx(COURT.rimX + s.x),
+    cy: ty(COURT.rimY + s.y),
+  });
+
+  if (view === "hex") {
+    // Hex binning in CANVAS coords for visual consistency at output size.
+    const hexSize = Math.max(8, sx * 12);
+    const hexW = Math.sqrt(3) * hexSize;
+    const hexH = 2 * hexSize;
+    const vertSpace = hexH * 0.75;
+    const bins = new Map();
+    for (const s of shots) {
+      const { cx, cy } = mapToCanvas(s);
+      if (cx < x || cx > x + w || cy < y || cy > y + h) continue;
+      const row = Math.floor((cy - y) / vertSpace);
+      const colOffset = row % 2 === 0 ? 0 : hexW / 2;
+      const col = Math.floor(((cx - x) - colOffset) / hexW);
+      const key = `${row}:${col}`;
+      let b = bins.get(key);
+      if (!b) { b = { row, col, made: 0, total: 0, cx: 0, cy: 0, zones: {} }; bins.set(key, b); }
+      b.total++; if (s.made) b.made++;
+      b.cx += cx; b.cy += cy;
+      if (s.zone) b.zones[s.zone] = (b.zones[s.zone] || 0) + 1;
+    }
+    let maxCount = 0;
+    for (const b of bins.values()) if (b.total > maxCount) maxCount = b.total;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(0,0,0,0.15)";
+    for (const b of bins.values()) {
+      if (b.total < 2) continue;
+      const cx = b.cx / b.total;
+      const cy = b.cy / b.total;
+      const fgp = b.made / b.total;
+      let bestZone = null, bestCount = 0;
+      for (const [z, c] of Object.entries(b.zones)) {
+        if (c > bestCount) { bestZone = z; bestCount = c; }
+      }
+      const zoneAvg = bestZone ? ZONE_LEAGUE_AVG[bestZone] : DEFAULT_ZONE_AVG;
+      const size = hexSize * (0.45 + 0.55 * Math.min(1, b.total / Math.max(8, maxCount / 4)));
+      ctx.fillStyle = hexColor(fgp, zoneAvg);
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const angle = Math.PI / 6 + (Math.PI / 3) * i;
+        const px = cx + size * Math.cos(angle);
+        const py = cy + size * Math.sin(angle);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+  } else {
+    // Dots view
+    const n = shots.length;
+    const r = sx * (n > 8000 ? 1.6 : n > 3000 ? 2.0 : 2.6);
+    const misses = [];
+    const makes = [];
+    for (const s of shots) {
+      if (s.made) makes.push(s); else misses.push(s);
+    }
+    for (const set of [misses, makes]) {
+      for (const s of set) {
+        const { cx, cy } = mapToCanvas(s);
+        if (cx < x || cx > x + w || cy < y || cy > y + h) continue;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+        ctx.fillStyle = s.made ? POSTER_THEME.madeSoft : POSTER_THEME.missedSoft;
+        ctx.fill();
+        ctx.lineWidth = Math.max(0.5, sx * 0.6);
+        ctx.strokeStyle = s.made ? POSTER_THEME.made : POSTER_THEME.missed;
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+// Try to load the headshot. Returns null on any failure so poster
+// generation never blocks on it.
+async function tryLoadHeadshot(pid) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    // Timeout to keep poster generation snappy.
+    setTimeout(() => resolve(null), 5000);
+    img.src = headshotUrl(pid);
+  });
+}
+
+// Format a season range like "2003-25" from start/end years.
+function seasonRangeLabel(min, max) {
+  const m2 = ((max + 1) % 100).toString().padStart(2, "0");
+  return `${min}-${m2}`;
+}
+
+async function renderPoster(size, brand) {
+  if (!STATE.selectedPid) throw new Error("No player loaded.");
+
+  const dims = POSTER_SIZES[size] || POSTER_SIZES.square;
+  const W = dims.w;
+  const H = dims.h;
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d");
+
+  // Background
+  ctx.fillStyle = POSTER_THEME.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Layout depends on aspect ratio.
+  //   square    -> chart is large center, name top, stats bottom, brand bottom
+  //   landscape -> chart left half, text right half
+  //   vertical  -> name top huge, chart middle, stats lower, brand foot
+  let layout;
+  if (size === "landscape") {
+    layout = {
+      chartX: 50, chartY: 80,
+      chartW: 540, chartH: H - 160,
+      textX: 620, textY: 90,
+      textW: W - 670,
+      stats: { x: 620, y: H - 200, w: W - 670 },
+      brand: { x: 0, y: H - 60, w: W, h: 60 },
+    };
+  } else if (size === "vertical") {
+    layout = {
+      chartX: 80, chartY: 470,
+      chartW: W - 160, chartH: 940,
+      textX: 80, textY: 130,
+      textW: W - 160,
+      stats: { x: 80, y: H - 380, w: W - 160 },
+      brand: { x: 0, y: H - 130, w: W, h: 130 },
+    };
+  } else { // square
+    layout = {
+      chartX: 100, chartY: 280,
+      chartW: W - 200, chartH: 720,
+      textX: 80, textY: 100,
+      textW: W - 160,
+      stats: { x: 80, y: H - 220, w: W - 160 },
+      brand: { x: 0, y: H - 90, w: W, h: 90 },
+    };
+  }
+
+  // The chart region preserves aspect (court is 500x470). Letterbox the
+  // chart inside the allotted region.
+  const courtAR = COURT.width / COURT.height;
+  let cw = layout.chartW;
+  let ch = layout.chartW / courtAR;
+  if (ch > layout.chartH) {
+    ch = layout.chartH;
+    cw = ch * courtAR;
+  }
+  const cx = layout.chartX + (layout.chartW - cw) / 2;
+  const cy = layout.chartY + (layout.chartH - ch) / 2;
+
+  // Court
+  drawCourtCanvas(ctx, cx, cy, cw, ch);
+
+  // Shots
+  const shots = shotsForChart();
+  drawShotsCanvas(ctx, cx, cy, cw, ch, shots, STATE.filters.view);
+
+  // Headshot (optional, top-right or top of vertical)
+  const headshot = await tryLoadHeadshot(STATE.selectedPid);
+  const cat = STATE.catalog[String(STATE.selectedPid)] || {};
+  const playerName = STATE.selectedName || cat.name || "";
+  const firstSeason = STATE.filters.seasonMin;
+  const lastSeason = STATE.filters.seasonMax;
+  const seasonLabel = seasonRangeLabel(firstSeason, lastSeason);
+
+  if (headshot) {
+    // Square headshot crop in top corner. Source image is ~1040x760.
+    const hsSize = size === "vertical" ? 240 : 180;
+    const hsX = size === "landscape" ? layout.textX : (size === "vertical" ? W - hsSize - 70 : W - hsSize - 70);
+    const hsY = size === "landscape" ? layout.textY - 10 : 60;
+    // Draw with object-fit:cover behavior
+    const srcAR = headshot.width / headshot.height;
+    let sw = headshot.width;
+    let sh = headshot.height;
+    let sx = 0, sy = 0;
+    if (srcAR > 1) {
+      sw = headshot.height;
+      sx = (headshot.width - sw) / 2;
+    } else {
+      sh = headshot.width;
+      sy = (headshot.height - sh) / 2;
+    }
+    // Rounded rect clip
+    ctx.save();
+    const radius = 12;
+    ctx.beginPath();
+    ctx.moveTo(hsX + radius, hsY);
+    ctx.lineTo(hsX + hsSize - radius, hsY);
+    ctx.arcTo(hsX + hsSize, hsY, hsX + hsSize, hsY + radius, radius);
+    ctx.lineTo(hsX + hsSize, hsY + hsSize - radius);
+    ctx.arcTo(hsX + hsSize, hsY + hsSize, hsX + hsSize - radius, hsY + hsSize, radius);
+    ctx.lineTo(hsX + radius, hsY + hsSize);
+    ctx.arcTo(hsX, hsY + hsSize, hsX, hsY + hsSize - radius, radius);
+    ctx.lineTo(hsX, hsY + radius);
+    ctx.arcTo(hsX, hsY, hsX + radius, hsY, radius);
+    ctx.closePath();
+    ctx.clip();
+    ctx.drawImage(headshot, sx, sy, sw, sh, hsX, hsY, hsSize, hsSize);
+    ctx.restore();
+  }
+
+  // Player name + meta text
+  ctx.fillStyle = POSTER_THEME.text;
+  ctx.textBaseline = "top";
+  const nameSize = size === "vertical" ? 80 : (size === "landscape" ? 56 : 64);
+  ctx.font = `700 ${nameSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif`;
+  // Wrap name to two lines if it's long
+  const nameLines = wrapText(ctx, playerName, layout.textW);
+  let textCursor = layout.textY;
+  for (const line of nameLines) {
+    ctx.fillText(line, layout.textX, textCursor);
+    textCursor += nameSize * 1.05;
+  }
+  textCursor += 8;
+  ctx.fillStyle = POSTER_THEME.muted;
+  ctx.font = `500 ${Math.round(nameSize * 0.42)}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif`;
+  ctx.fillText(`Career shot chart, ${seasonLabel}`, layout.textX, textCursor);
+
+  // Stats row
+  const statsList = computeStatsForPoster();
+  const labelSize = size === "vertical" ? 26 : 20;
+  const valueSize = size === "vertical" ? 56 : 44;
+  ctx.textBaseline = "top";
+  let statX = layout.stats.x;
+  const statSpacing = layout.stats.w / statsList.length;
+  for (const stat of statsList) {
+    ctx.fillStyle = POSTER_THEME.muted;
+    ctx.font = `500 ${labelSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif`;
+    ctx.fillText(stat.label.toUpperCase(), statX, layout.stats.y);
+    ctx.fillStyle = POSTER_THEME.text;
+    ctx.font = `700 ${valueSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif`;
+    ctx.fillText(stat.value, statX, layout.stats.y + labelSize + 6);
+    statX += statSpacing;
+  }
+
+  // Branding bar
+  ctx.fillStyle = POSTER_THEME.accent;
+  ctx.fillRect(layout.brand.x, layout.brand.y, layout.brand.w, layout.brand.h);
+  ctx.fillStyle = "#fff";
+  ctx.textBaseline = "middle";
+  const brandText = brand === "hoopshype" ? "HoopsHype.com" : "HoopsMatic.com";
+  const brandSize = size === "vertical" ? 56 : 40;
+  ctx.font = `800 ${brandSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif`;
+  const brandMetrics = ctx.measureText(brandText);
+  ctx.fillText(
+    brandText,
+    layout.brand.x + (layout.brand.w - brandMetrics.width) / 2,
+    layout.brand.y + layout.brand.h / 2
+  );
+
+  // Trigger download
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) { reject(new Error("toBlob failed")); return; }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const slug = slugify(playerName) || "player";
+      a.href = url;
+      a.download = `${slug}-shot-chart-${size}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      resolve();
+    }, "image/png");
+  });
+}
+
+function computeStatsForPoster() {
+  const pool = shotsForStats();
+  let total = pool.length;
+  let made = 0;
+  let threeAtt = 0;
+  let threeMade = 0;
+  for (const s of pool) {
+    if (s.made) made++;
+    if (s.three) { threeAtt++; if (s.made) threeMade++; }
+  }
+  const fgp = total ? made / total : 0;
+  const efg = total ? (made + 0.5 * threeMade) / total : 0;
+  const threeP = threeAtt ? threeMade / threeAtt : 0;
+  return [
+    { label: "Shots", value: total.toLocaleString() },
+    { label: "FG%", value: (fgp * 100).toFixed(1) + "%" },
+    { label: "eFG%", value: (efg * 100).toFixed(1) + "%" },
+    { label: "3P%", value: (threeP * 100).toFixed(1) + "%" },
+  ];
+}
+
+function wrapText(ctx, text, maxWidth) {
+  const words = text.split(" ");
+  const lines = [];
+  let line = "";
+  for (const w of words) {
+    const test = line ? line + " " + w : w;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      lines.push(line);
+      line = w;
+    } else {
+      line = test;
+    }
+  }
+  if (line) lines.push(line);
+  return lines.slice(0, 2);
+}
+
+// ---------- Combo / autocomplete (unchanged) ----------
 function openCombo() {
   STATE.comboOpen = true;
   $("#player-results").hidden = false;
   $(".combo").setAttribute("aria-expanded", "true");
 }
-
 function closeCombo() {
   STATE.comboOpen = false;
   STATE.comboActive = -1;
   $("#player-results").hidden = true;
   $(".combo").setAttribute("aria-expanded", "false");
 }
-
 function renderComboResults(query) {
   const ul = $("#player-results");
   const q = query.trim().toLowerCase();
@@ -522,7 +912,6 @@ function renderComboResults(query) {
   STATE.comboActive = -1;
   openCombo();
 }
-
 function selectComboItem(el) {
   if (!el || !el.dataset.pid) return;
   const pid = el.dataset.pid;
@@ -530,7 +919,6 @@ function selectComboItem(el) {
   $("#player-search").value = el.querySelector(".r-name")?.textContent || "";
   loadPlayer(pid);
 }
-
 function setActiveCombo(delta) {
   const items = $$(".combo-result[data-pid]");
   if (items.length === 0) return;
@@ -612,11 +1000,8 @@ function applyInitialFilters(first, last) {
   if (u.periods) {
     const set = new Set(u.periods);
     STATE.filters.periods = {
-      1: set.has("1"),
-      2: set.has("2"),
-      3: set.has("3"),
-      4: set.has("4"),
-      ot: set.has("ot"),
+      1: set.has("1"), 2: set.has("2"), 3: set.has("3"),
+      4: set.has("4"), ot: set.has("ot"),
     };
   }
   if (u.result) {
@@ -728,6 +1113,33 @@ function wireEvents() {
       setTimeout(() => { $("#copy-status").textContent = ""; }, 2000);
     } catch {
       $("#copy-status").textContent = "Press Ctrl+C to copy.";
+    }
+  });
+
+  // Poster popup
+  $("#poster-toggle").addEventListener("click", () => {
+    const pop = $("#poster-popup");
+    pop.hidden = !pop.hidden;
+  });
+  $("#poster-close").addEventListener("click", () => {
+    $("#poster-popup").hidden = true;
+    $("#poster-status").textContent = "";
+  });
+  $("#poster-render").addEventListener("click", async () => {
+    if (!STATE.selectedPid) {
+      $("#poster-status").textContent = "Pick a player first.";
+      return;
+    }
+    const size = document.querySelector('input[name="poster-size"]:checked')?.value || "square";
+    const brand = document.querySelector('input[name="poster-brand"]:checked')?.value || "hoopsmatic";
+    $("#poster-status").textContent = "Rendering...";
+    try {
+      await renderPoster(size, brand);
+      $("#poster-status").textContent = "Downloaded.";
+      setTimeout(() => { $("#poster-status").textContent = ""; }, 2500);
+    } catch (e) {
+      console.error(e);
+      $("#poster-status").textContent = `Failed: ${e.message || e}`;
     }
   });
 }

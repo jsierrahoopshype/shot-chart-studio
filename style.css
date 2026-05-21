@@ -52,6 +52,18 @@ main {
   font-weight: 600;
   letter-spacing: -0.01em;
 }
+.site-nav {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: 14px;
+}
+.site-nav a {
+  color: var(--muted);
+}
+.site-nav a:hover {
+  color: var(--accent);
+}
 .site-link { font-size: 14px; color: var(--muted); }
 
 .site-footer {
@@ -89,7 +101,6 @@ main {
   letter-spacing: 0.04em;
 }
 
-/* Combo / autocomplete */
 .panel-picker { position: relative; }
 .combo {
   display: flex;
@@ -164,7 +175,6 @@ main {
   color: var(--muted);
 }
 
-/* Filters */
 .filter-row {
   display: grid;
   grid-template-columns: 110px 1fr;
@@ -173,7 +183,7 @@ main {
   padding: 8px 0;
   border-bottom: 1px solid var(--border);
 }
-.filter-row:last-child { border-bottom: 0; }
+.filter-row:last-of-type { border-bottom: 0; }
 .filter-label {
   font-size: 13px;
   color: var(--muted);
@@ -238,11 +248,69 @@ main {
   font: inherit;
   font-size: 13px;
   cursor: pointer;
+  margin-right: 6px;
 }
 .copy-link:hover { border-color: var(--accent); color: var(--accent); }
 .copy-status { font-size: 12px; color: var(--muted); margin-left: 8px; }
 
-/* Chart area */
+/* Poster popup */
+.poster-popup {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.poster-row {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 6px 0;
+}
+.poster-row:last-child {
+  grid-template-columns: auto auto 1fr;
+}
+.poster-label {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+.radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.rdo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+.rdo input { margin: 0; }
+.poster-btn {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 500;
+}
+.poster-btn:hover { filter: brightness(1.08); }
+.poster-btn-secondary {
+  background: #fff;
+  color: var(--text);
+  border-color: var(--border);
+}
+.poster-btn-secondary:hover { color: var(--accent); border-color: var(--accent); }
+
 .chart-area {
   display: grid;
   grid-template-columns: 220px 1fr;
@@ -294,7 +362,6 @@ main {
   font-style: italic;
 }
 
-/* Shot dot styles */
 .shot-made {
   fill: var(--made-soft);
   stroke: var(--made);
@@ -305,14 +372,10 @@ main {
   stroke: var(--missed);
   stroke-width: 0.6;
 }
-
-/* Hex bin styles - color set inline based on FG% */
 .hex {
   stroke: rgba(0,0,0,0.15);
   stroke-width: 0.3;
 }
-
-/* Court line group */
 .court-lines path,
 .court-lines line,
 .court-lines circle,
